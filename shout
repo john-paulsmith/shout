@@ -1,0 +1,50 @@
+#!/bin/bash
+# Run a programme and send a push notification when it's finished.
+# Copyright 2014 Imagineer Systems Ltd
+
+# Suggested usage:
+# 
+# shout make
+#
+# I don't expect this script will work with and I/O redirections on the
+# command line.
+
+if [ -z "$PROWL_KEY" ]; then
+    echo "Set \$PROWL_KEY to your Prowl API key"
+    exit 1
+fi
+
+# Save stderr for later
+exec 6>&2
+
+# Execute anything supplied as an argument. Log stdout and err to include
+# in the notification.
+if [ $# -gt 0 ]; then
+    application="$1"
+    tmpfile=`mktemp -t shout`
+    exec > >(tee ${tmpfile}) 2>&1
+    $@
+    retcode=$?
+    output=`tail -c 1024 ${tmpfile}`
+    rm "$tmpfile"
+else
+    application="shout"
+    output=""
+fi
+
+if [ -n "$retcode" ]; then
+    if [ $retcode -eq 0 ]; then
+        event="Success"
+    else
+        event="Failed"
+    fi
+else
+    event="Done"
+fi
+
+# Restore stderr
+exec 2>&6 6>&-
+
+curl https://api.prowlapp.com/publicapi/add -sSf -F apikey=${PROWL_KEY} -F application="$application" -F event="$event" -F description="$output" > /dev/null
+
+exit $retcode
